@@ -1876,6 +1876,7 @@ cleanup:
     if (added || updated) {
         signalModifiedKey(c, c->db, key);
         notifyKeyspaceEvent(NOTIFY_ZSET, incr ? "zincr" : "zadd", key, c->db->id);
+        keyinfoUpdateEntryIfNeeded(key, zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
     }
 }
 
