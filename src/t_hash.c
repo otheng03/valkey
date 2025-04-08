@@ -838,6 +838,8 @@ void hsetCommand(client *c) {
     signalModifiedKey(c, c->db, c->argv[1]);
     notifyKeyspaceEvent(NOTIFY_HASH, "hset", c->argv[1], c->db->id);
     server.dirty += (c->argc - 2) / 2;
+    /* TODO : If a local variable for the number of elements exists,
+     * it will be reused instead of calculating the length. */
     keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
 }
 
