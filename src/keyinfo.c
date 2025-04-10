@@ -14,7 +14,7 @@ void keyinfoInit(void) {
     }
 }
 
-/* TODO : Remove entiry if entry exists and value < threshold */
+/* TODO : Remove entry if entry exists and value < threshold */
 void keyinfoUpdateEntryIfNeeded(robj *keyobj, long long value, int type) {
     if (server.keyinfo[type].threshold < 0 || server.keyinfo[type].max_len == 0) return; /* keyinfo disabled */
 
