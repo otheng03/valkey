@@ -17,11 +17,17 @@ void keyinfoInit(void) {
 /* TODO : Remove entiry if entry exists and value < threshold */
 void keyinfoUpdateEntryIfNeeded(robj *keyobj, long long value, int type) {
     if (server.keyinfo[type].threshold < 0 || server.keyinfo[type].max_len == 0) return; /* keyinfo disabled */
-    if (value < server.keyinfo[type].threshold) return;
 
     sds key = keyobj->ptr;
     unsigned int idx = crc16(key, sdslen(key)) % server.keyinfo[type].max_len;
     keyinfoEntry *entry = &server.keyinfo[type].entries[idx];
+
+    if (value < server.keyinfo[type].threshold) {
+        if (entry->key != NULL) {
+            keyinfoFreeEntry(entry);
+        }
+        return;
+    }
 
     /* If the entry is already set, free the entry */
     if (entry->key != NULL) {
