@@ -809,6 +809,7 @@ void hsetnxCommand(client *c) {
         signalModifiedKey(c, c->db, c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_HASH, "hset", c->argv[1], c->db->id);
         server.dirty++;
+        keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
     }
 }
 
@@ -823,6 +824,7 @@ void hsetCommand(client *c) {
 
     if ((o = hashTypeLookupWriteOrCreate(c, c->argv[1])) == NULL) return;
     hashTypeTryConversion(o, c->argv, 2, c->argc - 1);
+    keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
 
     for (i = 2; i < c->argc; i += 2) created += !hashTypeSet(o, c->argv[i]->ptr, c->argv[i + 1]->ptr, HASH_SET_COPY);
 
@@ -838,9 +840,6 @@ void hsetCommand(client *c) {
     signalModifiedKey(c, c->db, c->argv[1]);
     notifyKeyspaceEvent(NOTIFY_HASH, "hset", c->argv[1], c->db->id);
     server.dirty += (c->argc - 2) / 2;
-    /* TODO : If a local variable for the number of elements exists,
-     * it will be reused instead of calculating the length. */
-    keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
 }
 
 void hincrbyCommand(client *c) {
@@ -876,6 +875,7 @@ void hincrbyCommand(client *c) {
     signalModifiedKey(c, c->db, c->argv[1]);
     notifyKeyspaceEvent(NOTIFY_HASH, "hincrby", c->argv[1], c->db->id);
     server.dirty++;
+    keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
 }
 
 void hincrbyfloatCommand(client *c) {
@@ -919,6 +919,7 @@ void hincrbyfloatCommand(client *c) {
     signalModifiedKey(c, c->db, c->argv[1]);
     notifyKeyspaceEvent(NOTIFY_HASH, "hincrbyfloat", c->argv[1], c->db->id);
     server.dirty++;
+    keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
 
     /* Always replicate HINCRBYFLOAT as an HSET command with the final value
      * in order to make sure that differences in float precision or formatting
@@ -995,6 +996,7 @@ void hdelCommand(client *c) {
         notifyKeyspaceEvent(NOTIFY_HASH, "hdel", c->argv[1], c->db->id);
         if (keyremoved) notifyKeyspaceEvent(NOTIFY_GENERIC, "del", c->argv[1], c->db->id);
         server.dirty += deleted;
+        keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
     }
     addReplyLongLong(c, deleted);
 }

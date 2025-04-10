@@ -479,13 +479,13 @@ void pushGenericCommand(client *c, int where, int xx) {
         listTypePush(lobj, c->argv[j], where);
         server.dirty++;
     }
+    keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(lobj), KEYINFO_TYPE_MANY_ELEMENTS);
 
     addReplyLongLong(c, listTypeLength(lobj));
 
     char *event = (where == LIST_HEAD) ? "lpush" : "rpush";
     signalModifiedKey(c, c->db, c->argv[1]);
     notifyKeyspaceEvent(NOTIFY_LIST, event, c->argv[1], c->db->id);
-    keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(lobj), KEYINFO_TYPE_MANY_ELEMENTS);
 }
 
 /* LPUSH <key> <element> [<element> ...] */
@@ -550,6 +550,7 @@ void linsertCommand(client *c) {
         signalModifiedKey(c, c->db, c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_LIST, "linsert", c->argv[1], c->db->id);
         server.dirty++;
+        keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(subject), KEYINFO_TYPE_MANY_ELEMENTS);
     } else {
         /* Notify client of a failed insert */
         addReplyLongLong(c, -1);
@@ -796,6 +797,7 @@ void popGenericCommand(client *c, int where) {
         listTypeDelRange(o, rangestart, rangelen);
         listElementsRemoved(c, c->argv[1], where, o, rangelen, 1, NULL);
     }
+    keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
 }
 
 /* Like popGenericCommand but work with multiple keys.
@@ -910,6 +912,7 @@ void ltrimCommand(client *c) {
     }
     signalModifiedKey(c, c->db, c->argv[1]);
     server.dirty += (ltrim + rtrim);
+    keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
     addReply(c, shared.ok);
 }
 
@@ -1060,6 +1063,7 @@ void lremCommand(client *c) {
             listTypeTryConversion(subject, LIST_CONV_SHRINKING, NULL, NULL);
         }
         signalModifiedKey(c, c->db, c->argv[1]);
+        keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(subject), KEYINFO_TYPE_MANY_ELEMENTS);
     }
 
     addReplyLongLong(c, removed);
@@ -1127,6 +1131,7 @@ void lmoveGenericCommand(client *c, int wherefrom, int whereto) {
         } else if (c->cmd->proc == brpoplpushCommand) {
             rewriteClientCommandVector(c, 3, shared.rpoplpush, c->argv[1], c->argv[2]);
         }
+        keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(sobj), KEYINFO_TYPE_MANY_ELEMENTS);
     }
 }
 

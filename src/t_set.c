@@ -641,6 +641,7 @@ void sremCommand(client *c) {
         notifyKeyspaceEvent(NOTIFY_SET, "srem", c->argv[1], c->db->id);
         if (keyremoved) notifyKeyspaceEvent(NOTIFY_GENERIC, "del", c->argv[1], c->db->id);
         server.dirty += deleted;
+        keyinfoUpdateEntryIfNeeded(c->argv[1], setTypeSize(set), KEYINFO_TYPE_MANY_ELEMENTS);
     }
     addReplyLongLong(c, deleted);
 }
@@ -788,6 +789,7 @@ void spopWithCountCommand(client *c) {
         robj *aux = server.lazyfree_lazy_server_del ? shared.unlink : shared.del;
         rewriteClientCommandVector(c, 2, aux, c->argv[1]);
         signalModifiedKey(c, c->db, c->argv[1]);
+        keyinfoUpdateEntryIfNeeded(c->argv[1], 0, KEYINFO_TYPE_MANY_ELEMENTS);
         return;
     }
 
@@ -947,6 +949,7 @@ void spopWithCountCommand(client *c) {
      * the alsoPropagate() API. */
     preventCommandPropagation(c);
     signalModifiedKey(c, c->db, c->argv[1]);
+    keyinfoUpdateEntryIfNeeded(c->argv[1], setTypeSize(set), KEYINFO_TYPE_MANY_ELEMENTS);
 }
 
 void spopCommand(client *c) {
@@ -986,6 +989,7 @@ void spopCommand(client *c) {
     /* Set has been modified */
     signalModifiedKey(c, c->db, c->argv[1]);
     server.dirty++;
+    keyinfoUpdateEntryIfNeeded(c->argv[1], setTypeSize(set), KEYINFO_TYPE_MANY_ELEMENTS);
 }
 
 /* handle the "SRANDMEMBER key <count>" variant. The normal version of the

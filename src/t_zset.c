@@ -1860,6 +1860,7 @@ static void zaddGenericCommand(client *c, int flags) {
         score = newscore;
     }
     server.dirty += (added + updated);
+    keyinfoUpdateEntryIfNeeded(c->argv[1], zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
 
 reply_to_client:
     if (incr) { /* ZINCRBY or INCR option. */
@@ -1909,6 +1910,7 @@ void zremCommand(client *c) {
         if (keyremoved) notifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, c->db->id);
         signalModifiedKey(c, c->db, key);
         server.dirty += deleted;
+        keyinfoUpdateEntryIfNeeded(c->argv[1], zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
     }
     addReplyLongLong(c, deleted);
 }
@@ -2009,6 +2011,7 @@ void zremrangeGenericCommand(client *c, zrange_type rangetype) {
         if (keyremoved) notifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, c->db->id);
     }
     server.dirty += deleted;
+    keyinfoUpdateEntryIfNeeded(c->argv[1], zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
     addReplyLongLong(c, deleted);
 
 cleanup:
@@ -3929,6 +3932,7 @@ void genericZpopCommand(client *c,
         notifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, c->db->id);
     }
     signalModifiedKey(c, c->db, key);
+    keyinfoUpdateEntryIfNeeded(c->argv[1], zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
 
     if (c->cmd->proc == zmpopCommand) {
         /* Always replicate it as ZPOP[MIN|MAX] with COUNT option instead of ZMPOP. */
