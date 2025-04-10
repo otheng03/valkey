@@ -994,9 +994,13 @@ void hdelCommand(client *c) {
     if (deleted) {
         signalModifiedKey(c, c->db, c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_HASH, "hdel", c->argv[1], c->db->id);
-        if (keyremoved) notifyKeyspaceEvent(NOTIFY_GENERIC, "del", c->argv[1], c->db->id);
+        if (keyremoved) {
+            keyinfoUpdateEntryIfNeeded(c->argv[1], 0, KEYINFO_TYPE_MANY_ELEMENTS);
+            notifyKeyspaceEvent(NOTIFY_GENERIC, "del", c->argv[1], c->db->id);
+        } else {
+            keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
+        }
         server.dirty += deleted;
-        keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
     }
     addReplyLongLong(c, deleted);
 }

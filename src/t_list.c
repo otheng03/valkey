@@ -737,7 +737,9 @@ void listElementsRemoved(client *c, robj *key, int where, robj *o, long count, i
     char *event = (where == LIST_HEAD) ? "lpop" : "rpop";
 
     notifyKeyspaceEvent(NOTIFY_LIST, event, key, c->db->id);
-    if (listTypeLength(o) == 0) {
+    long llen = listTypeLength(o);
+    keyinfoUpdateEntryIfNeeded(c->argv[1], llen, KEYINFO_TYPE_MANY_ELEMENTS);
+    if (llen == 0) {
         if (deleted) *deleted = 1;
 
         dbDelete(c->db, key);
@@ -797,7 +799,6 @@ void popGenericCommand(client *c, int where) {
         listTypeDelRange(o, rangestart, rangelen);
         listElementsRemoved(c, c->argv[1], where, o, rangelen, 1, NULL);
     }
-    keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
 }
 
 /* Like popGenericCommand but work with multiple keys.
@@ -904,7 +905,9 @@ void ltrimCommand(client *c) {
     }
 
     notifyKeyspaceEvent(NOTIFY_LIST, "ltrim", c->argv[1], c->db->id);
-    if (listTypeLength(o) == 0) {
+    llen = listTypeLength(o);
+    keyinfoUpdateEntryIfNeeded(c->argv[1], llen, KEYINFO_TYPE_MANY_ELEMENTS);
+    if (llen == 0) {
         dbDelete(c->db, c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_GENERIC, "del", c->argv[1], c->db->id);
     } else {
@@ -912,7 +915,6 @@ void ltrimCommand(client *c) {
     }
     signalModifiedKey(c, c->db, c->argv[1]);
     server.dirty += (ltrim + rtrim);
-    keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
     addReply(c, shared.ok);
 }
 
@@ -1056,14 +1058,15 @@ void lremCommand(client *c) {
 
     if (removed) {
         notifyKeyspaceEvent(NOTIFY_LIST, "lrem", c->argv[1], c->db->id);
-        if (listTypeLength(subject) == 0) {
+        long llen = listTypeLength(subject);
+        keyinfoUpdateEntryIfNeeded(c->argv[1], llen, KEYINFO_TYPE_MANY_ELEMENTS);
+        if (llen == 0) {
             dbDelete(c->db, c->argv[1]);
             notifyKeyspaceEvent(NOTIFY_GENERIC, "del", c->argv[1], c->db->id);
         } else {
             listTypeTryConversion(subject, LIST_CONV_SHRINKING, NULL, NULL);
         }
         signalModifiedKey(c, c->db, c->argv[1]);
-        keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(subject), KEYINFO_TYPE_MANY_ELEMENTS);
     }
 
     addReplyLongLong(c, removed);
@@ -1131,7 +1134,6 @@ void lmoveGenericCommand(client *c, int wherefrom, int whereto) {
         } else if (c->cmd->proc == brpoplpushCommand) {
             rewriteClientCommandVector(c, 3, shared.rpoplpush, c->argv[1], c->argv[2]);
         }
-        keyinfoUpdateEntryIfNeeded(c->argv[1], listTypeLength(sobj), KEYINFO_TYPE_MANY_ELEMENTS);
     }
 }
 

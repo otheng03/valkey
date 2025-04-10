@@ -1907,10 +1907,14 @@ void zremCommand(client *c) {
 
     if (deleted) {
         notifyKeyspaceEvent(NOTIFY_ZSET, "zrem", key, c->db->id);
-        if (keyremoved) notifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, c->db->id);
+        if (keyremoved) {
+            keyinfoUpdateEntryIfNeeded(c->argv[1], 0, KEYINFO_TYPE_MANY_ELEMENTS);
+            notifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, c->db->id);
+        } else {
+            keyinfoUpdateEntryIfNeeded(c->argv[1], zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
+        }
         signalModifiedKey(c, c->db, key);
         server.dirty += deleted;
-        keyinfoUpdateEntryIfNeeded(c->argv[1], zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
     }
     addReplyLongLong(c, deleted);
 }
@@ -2008,10 +2012,14 @@ void zremrangeGenericCommand(client *c, zrange_type rangetype) {
     if (deleted) {
         signalModifiedKey(c, c->db, key);
         notifyKeyspaceEvent(NOTIFY_ZSET, notify_type, key, c->db->id);
-        if (keyremoved) notifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, c->db->id);
+        if (keyremoved) {
+            keyinfoUpdateEntryIfNeeded(c->argv[1], 0, KEYINFO_TYPE_MANY_ELEMENTS);
+            notifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, c->db->id);
+        } else {
+            keyinfoUpdateEntryIfNeeded(c->argv[1], zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
+        }
     }
     server.dirty += deleted;
-    keyinfoUpdateEntryIfNeeded(c->argv[1], zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
     addReplyLongLong(c, deleted);
 
 cleanup:
@@ -3925,14 +3933,15 @@ void genericZpopCommand(client *c,
     } while (--rangelen);
 
     /* Remove the key, if indeed needed. */
-    if (zsetLength(zobj) == 0) {
+    long nlen = zsetLength(zobj);
+    keyinfoUpdateEntryIfNeeded(c->argv[1], nlen, KEYINFO_TYPE_MANY_ELEMENTS);
+    if (nlen == 0) {
         if (deleted) *deleted = 1;
 
         dbDelete(c->db, key);
         notifyKeyspaceEvent(NOTIFY_GENERIC, "del", key, c->db->id);
     }
     signalModifiedKey(c, c->db, key);
-    keyinfoUpdateEntryIfNeeded(c->argv[1], zsetLength(zobj), KEYINFO_TYPE_MANY_ELEMENTS);
 
     if (c->cmd->proc == zmpopCommand) {
         /* Always replicate it as ZPOP[MIN|MAX] with COUNT option instead of ZMPOP. */

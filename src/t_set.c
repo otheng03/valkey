@@ -639,9 +639,13 @@ void sremCommand(client *c) {
     if (deleted) {
         signalModifiedKey(c, c->db, c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_SET, "srem", c->argv[1], c->db->id);
-        if (keyremoved) notifyKeyspaceEvent(NOTIFY_GENERIC, "del", c->argv[1], c->db->id);
+        if (keyremoved) {
+            keyinfoUpdateEntryIfNeeded(c->argv[1], 0, KEYINFO_TYPE_MANY_ELEMENTS);
+            notifyKeyspaceEvent(NOTIFY_GENERIC, "del", c->argv[1], c->db->id);
+        } else {
+            keyinfoUpdateEntryIfNeeded(c->argv[1], setTypeSize(set), KEYINFO_TYPE_MANY_ELEMENTS);
+        }
         server.dirty += deleted;
-        keyinfoUpdateEntryIfNeeded(c->argv[1], setTypeSize(set), KEYINFO_TYPE_MANY_ELEMENTS);
     }
     addReplyLongLong(c, deleted);
 }
@@ -980,6 +984,8 @@ void spopCommand(client *c) {
     addReplyBulk(c, ele);
     decrRefCount(ele);
 
+    keyinfoUpdateEntryIfNeeded(c->argv[1], setTypeSize(set), KEYINFO_TYPE_MANY_ELEMENTS);
+
     /* Delete the set if it's empty */
     if (setTypeSize(set) == 0) {
         dbDelete(c->db, c->argv[1]);
@@ -989,7 +995,6 @@ void spopCommand(client *c) {
     /* Set has been modified */
     signalModifiedKey(c, c->db, c->argv[1]);
     server.dirty++;
-    keyinfoUpdateEntryIfNeeded(c->argv[1], setTypeSize(set), KEYINFO_TYPE_MANY_ELEMENTS);
 }
 
 /* handle the "SRANDMEMBER key <count>" variant. The normal version of the

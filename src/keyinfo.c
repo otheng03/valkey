@@ -74,17 +74,17 @@ void keyinfoCommand(client *c) {
     int type;
     if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr, "help")) {
         const char *help[] = {
-                "GET <count> <type>",
-                "    Return top <count> entries of the specified <type> from the keyinfo (-1 mean all).",
-                "    Entries are made of:",
-                "    id, key,",
-                "        the number of elements for type of many-elements,",
-                "    timestamp",
-                "LEN <type>",
-                "    Return the length of the specified type of keyinfo.",
-                "RESET <type>",
-                "    Reset the specified type of keyinfo.",
-                NULL,
+            "GET <count> <type>",
+            "    Return top <count> entries of the specified <type> from the keyinfo (-1 mean all).",
+            "    Entries are made of:",
+            "    id, key,",
+            "        the number of elements for type of many-elements,",
+            "    timestamp",
+            "LEN <type>",
+            "    Return the length of the specified type of keyinfo.",
+            "RESET <type>",
+            "    Reset the specified type of keyinfo.",
+            NULL,
         };
         addReplyHelp(c, help);
     } else if (c->argc == 3 && !strcasecmp(c->argv[1]->ptr, "reset")) {
