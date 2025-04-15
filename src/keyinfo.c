@@ -8,7 +8,7 @@ void keyinfoFreeEntry(keyinfoEntry *entry) {
 /* Initialize the bigkey log. This function should be called a single time at server startup. */
 void keyinfoInit(void) {
     for (int i = 0; i < KEYINFO_TYPE_NUM; i++) {
-        server.keyinfo[i].entries = zmalloc(sizeof(keyinfoEntry) * server.keyinfo[i].max_len);
+        server.keyinfo[i].entries = zcalloc(sizeof(keyinfoEntry) * server.keyinfo[i].max_len);
         /* TODO : Since the bucket size is fixed, the entry_id can be retrieved from the bucket index. */
         server.keyinfo[i].entry_id = 0;
     }
@@ -29,13 +29,14 @@ void keyinfoUpdateEntryIfNeeded(robj *keyobj, long long value, int type) {
         return;
     }
 
+    incrRefCount(keyobj);
+
     /* If the entry is already set, free the entry */
     if (entry->key != NULL) {
         /* TODO : If the previous key is the same as the current key, it can be skipped. */
         keyinfoFreeEntry(entry);
     }
 
-    incrRefCount(keyobj);
     entry->id = server.keyinfo[type].entry_id++;
     entry->key = keyobj;
     entry->value = value;
