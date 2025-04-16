@@ -1724,7 +1724,7 @@ struct valkeyServer {
     long long stat_sync_partial_ok;                /* Number of accepted PSYNC requests. */
     long long stat_sync_partial_err;               /* Number of unaccepted PSYNC requests. */
     commandlog commandlog[COMMANDLOG_TYPE_NUM];    /* Logs of commands. */
-    keyinfo keyinfo[KEYINFO_TYPE_NUM];
+    keyinfo keyinfo[KEYINFO_TYPE_NUM];             /* Key information. */
     struct malloc_stats cron_malloc_stats;         /* sampled in serverCron(). */
     long long stat_net_input_bytes;                /* Bytes read from network. */
     long long stat_net_output_bytes;               /* Bytes written to network. */
