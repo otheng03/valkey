@@ -824,9 +824,10 @@ void hsetCommand(client *c) {
 
     if ((o = hashTypeLookupWriteOrCreate(c, c->argv[1])) == NULL) return;
     hashTypeTryConversion(o, c->argv, 2, c->argc - 1);
-    keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
 
     for (i = 2; i < c->argc; i += 2) created += !hashTypeSet(o, c->argv[i]->ptr, c->argv[i + 1]->ptr, HASH_SET_COPY);
+
+    keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
 
     /* HMSET (deprecated) and HSET return value is different. */
     char *cmdname = c->argv[0]->ptr;

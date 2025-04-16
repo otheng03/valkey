@@ -22,7 +22,7 @@ void keyinfoUpdateEntryIfNeeded(robj *keyobj, long long value, int type) {
     unsigned int idx = crc16(key, sdslen(key)) % server.keyinfo[type].max_len;
     keyinfoEntry *entry = &server.keyinfo[type].entries[idx];
 
-    if (value < server.keyinfo[type].threshold) {
+    if (value <= server.keyinfo[type].threshold) {
         if (entry->key != NULL) {
             keyinfoFreeEntry(entry);
         }
