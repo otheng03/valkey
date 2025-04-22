@@ -805,11 +805,11 @@ void hsetnxCommand(client *c) {
     } else {
         hashTypeTryConversion(o, c->argv, 2, 3);
         hashTypeSet(o, c->argv[2]->ptr, c->argv[3]->ptr, HASH_SET_COPY);
-        addReply(c, shared.cone);
         signalModifiedKey(c, c->db, c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_HASH, "hset", c->argv[1], c->db->id);
         server.dirty++;
         keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
+        addReply(c, shared.cone);
     }
 }
 
@@ -828,6 +828,9 @@ void hsetCommand(client *c) {
     for (i = 2; i < c->argc; i += 2) created += !hashTypeSet(o, c->argv[i]->ptr, c->argv[i + 1]->ptr, HASH_SET_COPY);
 
     keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
+    signalModifiedKey(c, c->db, c->argv[1]);
+    notifyKeyspaceEvent(NOTIFY_HASH, "hset", c->argv[1], c->db->id);
+    server.dirty += (c->argc - 2) / 2;
 
     /* HMSET (deprecated) and HSET return value is different. */
     char *cmdname = c->argv[0]->ptr;
@@ -838,9 +841,6 @@ void hsetCommand(client *c) {
         /* HMSET */
         addReply(c, shared.ok);
     }
-    signalModifiedKey(c, c->db, c->argv[1]);
-    notifyKeyspaceEvent(NOTIFY_HASH, "hset", c->argv[1], c->db->id);
-    server.dirty += (c->argc - 2) / 2;
 }
 
 void hincrbyCommand(client *c) {
@@ -872,11 +872,11 @@ void hincrbyCommand(client *c) {
     value += incr;
     new = sdsfromlonglong(value);
     hashTypeSet(o, c->argv[2]->ptr, new, HASH_SET_TAKE_VALUE);
-    addReplyLongLong(c, value);
     signalModifiedKey(c, c->db, c->argv[1]);
     notifyKeyspaceEvent(NOTIFY_HASH, "hincrby", c->argv[1], c->db->id);
     server.dirty++;
     keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
+    addReplyLongLong(c, value);
 }
 
 void hincrbyfloatCommand(client *c) {
@@ -916,11 +916,11 @@ void hincrbyfloatCommand(client *c) {
     int len = ld2string(buf, sizeof(buf), value, LD_STR_HUMAN);
     new = sdsnewlen(buf, len);
     hashTypeSet(o, c->argv[2]->ptr, new, HASH_SET_TAKE_VALUE);
-    addReplyBulkCBuffer(c, buf, len);
     signalModifiedKey(c, c->db, c->argv[1]);
     notifyKeyspaceEvent(NOTIFY_HASH, "hincrbyfloat", c->argv[1], c->db->id);
     server.dirty++;
     keyinfoUpdateEntryIfNeeded(c->argv[1], hashTypeLength(o), KEYINFO_TYPE_MANY_ELEMENTS);
+    addReplyBulkCBuffer(c, buf, len);
 
     /* Always replicate HINCRBYFLOAT as an HSET command with the final value
      * in order to make sure that differences in float precision or formatting

@@ -72,7 +72,7 @@ int clusterNodeAddReplica(clusterNode *primary, clusterNode *replica);
 int clusterAddSlot(clusterNode *n, int slot);
 int clusterDelSlot(int slot);
 int clusterDelNodeSlots(clusterNode *node);
-int clusterNodeSetSlotBit(clusterNode *n, int slot);
+void clusterNodeSetSlotBit(clusterNode *n, int slot);
 static void clusterSetPrimary(clusterNode *n, int closeSlots, int full_sync_required);
 void clusterHandleReplicaFailover(void);
 void clusterHandleReplicaMigration(int max_replicas);
@@ -815,10 +815,7 @@ int clusterLoadConfig(char *filename) {
     return C_OK;
 
 fmterr:
-    serverLog(LL_WARNING, "Unrecoverable error: corrupted cluster config file \"%s\".", line);
-    zfree(line);
-    if (fp) fclose(fp);
-    exit(1);
+    serverPanic("Unrecoverable error: corrupted cluster config file \"%s\".", line);
 }
 
 /* Cluster node configuration is exactly the same as CLUSTER NODES output.
@@ -1089,6 +1086,27 @@ static void updateAnnouncedClientIpV6(clusterNode *node, char *value) {
 }
 
 static void updateShardId(clusterNode *node, const char *shard_id) {
+    /* Ensure replica shard IDs match their primary's to maintain cluster consistency.
+     *
+     * Shard ID updates must prioritize the primary, then propagate to replicas.
+     * This is critical due to the eventual consistency of shard IDs during cluster
+     * expansion. New replicas might replicate from a primary before fully
+     * synchronizing shard IDs with the rest of the cluster.
+     *
+     * Without this enforcement, a temporary inconsistency can arise where a
+     * replica's shard ID diverges from its primary's. This inconsistency is
+     * persisted in the primary's nodes.conf file. While this divergence will
+     * eventually resolve, if the primary crashes beforehand, it will enter a
+     * crash-restart loop due to the mismatch in its nodes.conf. */
+    if (shard_id && nodeIsReplica(node) &&
+        memcmp(clusterNodeGetPrimary(node)->shard_id, shard_id, CLUSTER_NAMELEN) != 0) {
+        serverLog(
+            LL_NOTICE,
+            "Shard id %.40s update request for node id %.40s diverges from existing primary shard id %.40s, rejecting!",
+            shard_id, node->name, clusterNodeGetPrimary(node)->shard_id);
+        return;
+    }
+
     if (shard_id && memcmp(node->shard_id, shard_id, CLUSTER_NAMELEN) != 0) {
         clusterRemoveNodeFromShard(node);
         memcpy(node->shard_id, shard_id, CLUSTER_NAMELEN);
@@ -1254,8 +1272,68 @@ void clusterInitLast(void) {
     }
 }
 
+void clusterAutoFailoverOnShutdown(void) {
+    if (!nodeIsPrimary(myself) || !server.auto_failover_on_shutdown) return;
+
+    /* Find the first best replica, that is, the replica with the largest offset. */
+    int legacy_replica = 0;
+    client *best_replica = NULL;
+    listIter replicas_iter;
+    listNode *replicas_list_node;
+    listRewind(server.replicas, &replicas_iter);
+    while ((replicas_list_node = listNext(&replicas_iter)) != NULL) {
+        client *replica = listNodeValue(replicas_list_node);
+        /* This is done only when the replica offset is caught up, to avoid data loss.
+         * And 0x90000 is 9.0.0, we only support this feature in this version. */
+        if (replica->repl_data->replica_version < 0x90000) {
+            legacy_replica = 1;
+            best_replica = NULL;
+            break;
+        }
+        if (replica->repl_data->repl_state == REPLICA_STATE_ONLINE &&
+            replica->repl_data->repl_ack_off == server.primary_repl_offset &&
+            replica->repl_data->replica_nodeid && sdslen(replica->repl_data->replica_nodeid) == CLUSTER_NAMELEN) {
+            best_replica = replica;
+        }
+    }
+
+    /* We are not able to find the replica to do the auto failover. */
+    if (best_replica == NULL) {
+        if (legacy_replica) {
+            serverLog(LL_NOTICE, "Unable to perform auto failover on shutdown since there are legacy replicas.");
+        } else {
+            serverLog(LL_NOTICE, "Unable to find a replica to perform the auto failover on shutdown.");
+        }
+        return;
+    }
+
+    /* Send the CLUSTER FAILOVER FORCE REPLICAID node-id to all replicas since
+     * it is a shared replication buffer, but only the replica with the matching
+     * node-id will execute it. The caller will call flushReplicasOutputBuffers,
+     * so in here it is a best effort. */
+    char buf[128];
+    size_t buflen = snprintf(buf, sizeof(buf),
+                             "*5\r\n$7\r\nCLUSTER\r\n"
+                             "$8\r\nFAILOVER\r\n"
+                             "$5\r\nFORCE\r\n"
+                             "$9\r\nREPLICAID\r\n"
+                             "$%d\r\n%.*s\r\n",
+                             CLUSTER_NAMELEN,
+                             CLUSTER_NAMELEN,
+                             best_replica->repl_data->replica_nodeid);
+    serverAssert(buflen <= 128);
+    /* Must install write handler for all replicas first before feeding
+     * replication stream. */
+    prepareReplicasToWrite();
+    feedReplicationBuffer(buf, buflen);
+    serverLog(LL_NOTICE, "Perform auto failover to replica %s on shutdown.", best_replica->repl_data->replica_nodeid);
+}
+
 /* Called when a cluster node receives SHUTDOWN. */
 void clusterHandleServerShutdown(void) {
+    /* Check if we are able to do the auto failover on shutdown. */
+    clusterAutoFailoverOnShutdown();
+
     /* The error logs have been logged in the save function if the save fails. */
     serverLog(LL_NOTICE, "Saving the cluster configuration file before exiting.");
     clusterSaveConfig(1);
@@ -1294,7 +1372,7 @@ void clusterReset(int hard) {
     if (nodeIsReplica(myself)) {
         clusterSetNodeAsPrimary(myself);
         replicationUnsetPrimary();
-        flushAllDataAndResetRDB(server.repl_replica_lazy_flush ? EMPTYDB_ASYNC : EMPTYDB_NO_FLAGS);
+        flushAllDataAndResetRDB(server.lazyfree_lazy_user_flush ? EMPTYDB_ASYNC : EMPTYDB_NO_FLAGS);
     }
 
     /* Close slots, reset manual failover state. */
@@ -3517,14 +3595,17 @@ int clusterProcessPacket(clusterLink *link) {
                     /* Primary turned into a replica! Reconfigure the node. */
                     if (sender_claimed_primary && areInSameShard(sender_claimed_primary, sender)) {
                         /* `sender` was a primary and was in the same shard as its new primary */
-                        if (sender->configEpoch > sender_claimed_config_epoch) {
+                        if (nodeEpoch(sender_claimed_primary) > sender_claimed_config_epoch) {
                             serverLog(LL_NOTICE,
                                       "Ignore stale message from %.40s (%s) in shard %.40s;"
                                       " gossip config epoch: %llu, current config epoch: %llu",
                                       sender->name, sender->human_nodename, sender->shard_id,
                                       (unsigned long long)sender_claimed_config_epoch,
-                                      (unsigned long long)sender->configEpoch);
-                        } else {
+                                      (unsigned long long)nodeEpoch(sender_claimed_primary));
+                            /* This packet is stale so we avoid processing it anymore. Otherwise
+                             * this may cause a primary-replica chain issue. */
+                            return 1;
+                        } else if (nodeIsReplica(sender_claimed_primary)) {
                             /* `primary` is still a `replica` in this observer node's view;
                              * update its role and configEpoch */
                             clusterSetNodeAsPrimary(sender_claimed_primary);
@@ -5546,10 +5627,8 @@ int clusterPrimariesHaveReplicas(void) {
     return replicas != 0;
 }
 
-/* Set the slot bit and return the old value. */
-int clusterNodeSetSlotBit(clusterNode *n, int slot) {
-    int old = bitmapTestBit(n->slots, slot);
-    if (!old) {
+void clusterNodeSetSlotBit(clusterNode *n, int slot) {
+    if (!bitmapTestBit(n->slots, slot)) {
         bitmapSetBit(n->slots, slot);
         n->numslots++;
         /* When a primary gets its first slot, even if it has no replicas,
@@ -5567,7 +5646,6 @@ int clusterNodeSetSlotBit(clusterNode *n, int slot) {
          * See https://github.com/redis/redis/issues/3043 for more info. */
         if (n->numslots == 1 && clusterPrimariesHaveReplicas()) n->flags |= CLUSTER_NODE_MIGRATE_TO;
     }
-    return old;
 }
 
 /* Clear the slot bit and return the old value. */
@@ -6384,18 +6462,42 @@ sds genClusterInfoString(void) {
         }
     }
 
+    dictIterator *di = dictGetIterator(server.cluster->nodes);
+    dictEntry *de;
+    unsigned nodes_pfail = 0, nodes_fail = 0, voting_nodes_pfail = 0, voting_nodes_fail = 0;
+    while ((de = dictNext(di)) != NULL) {
+        clusterNode *node = dictGetVal(de);
+        if (nodeTimedOut(node)) {
+            nodes_pfail++;
+            if (clusterNodeIsVotingPrimary(node)) {
+                voting_nodes_pfail++;
+            }
+        }
+        if (nodeFailed(node)) {
+            nodes_fail++;
+            if (clusterNodeIsVotingPrimary(node)) {
+                voting_nodes_fail++;
+            }
+        }
+    }
+    dictReleaseIterator(di);
+
     info = sdscatprintf(info,
                         "cluster_state:%s\r\n"
                         "cluster_slots_assigned:%d\r\n"
                         "cluster_slots_ok:%d\r\n"
                         "cluster_slots_pfail:%d\r\n"
                         "cluster_slots_fail:%d\r\n"
+                        "cluster_nodes_pfail:%u\r\n"
+                        "cluster_nodes_fail:%u\r\n"
+                        "cluster_voting_nodes_pfail:%u\r\n"
+                        "cluster_voting_nodes_fail:%u\r\n"
                         "cluster_known_nodes:%lu\r\n"
                         "cluster_size:%d\r\n"
                         "cluster_current_epoch:%llu\r\n"
                         "cluster_my_epoch:%llu\r\n",
                         statestr[server.cluster->state], slots_assigned, slots_ok, slots_pfail, slots_fail,
-                        dictSize(server.cluster->nodes), server.cluster->size,
+                        nodes_pfail, nodes_fail, voting_nodes_pfail, voting_nodes_fail, dictSize(server.cluster->nodes), server.cluster->size,
                         (unsigned long long)server.cluster->currentEpoch, (unsigned long long)nodeEpoch(myself));
 
     /* Show stats about messages sent and received. */
@@ -7132,20 +7234,35 @@ int clusterCommandSpecial(client *c) {
         } else {
             addReplyLongLong(c, clusterNodeFailureReportsCount(n));
         }
-    } else if (!strcasecmp(c->argv[1]->ptr, "failover") && (c->argc == 2 || c->argc == 3)) {
-        /* CLUSTER FAILOVER [FORCE|TAKEOVER] */
+    } else if (!strcasecmp(c->argv[1]->ptr, "failover") && (c->argc >= 2)) {
+        /* CLUSTER FAILOVER [FORCE|TAKEOVER] [REPLICAID <NODE ID>]
+         * REPLICAID is currently available only for internal so we won't
+         * put it into the JSON file. */
         int force = 0, takeover = 0;
+        robj *replicaid = NULL;
 
-        if (c->argc == 3) {
-            if (!strcasecmp(c->argv[2]->ptr, "force")) {
+        for (int j = 2; j < c->argc; j++) {
+            int moreargs = (c->argc - 1) - j;
+            if (!strcasecmp(c->argv[j]->ptr, "force")) {
                 force = 1;
-            } else if (!strcasecmp(c->argv[2]->ptr, "takeover")) {
+            } else if (!strcasecmp(c->argv[j]->ptr, "takeover")) {
                 takeover = 1;
                 force = 1; /* Takeover also implies force. */
+            } else if (c == server.primary && !strcasecmp(c->argv[j]->ptr, "replicaid") && moreargs) {
+                /* This option is currently available only for primary. */
+                j++;
+                replicaid = c->argv[j];
             } else {
                 addReplyErrorObject(c, shared.syntaxerr);
                 return 1;
             }
+        }
+
+        /* Check if it should be executed by myself. */
+        if (replicaid != NULL && memcmp(replicaid->ptr, myself->name, CLUSTER_NAMELEN) != 0) {
+            /* Ignore this command, including the sanity check and the process. */
+            addReply(c, shared.ok);
+            return 1;
         }
 
         /* Check preconditions. */
@@ -7156,8 +7273,7 @@ int clusterCommandSpecial(client *c) {
             addReplyError(c, "I'm a replica but my master is unknown to me");
             return 1;
         } else if (!force && (nodeFailed(myself->replicaof) || myself->replicaof->link == NULL)) {
-            addReplyError(c, "Master is down or failed, "
-                             "please use CLUSTER FAILOVER FORCE");
+            addReplyError(c, "Master is down or failed, please use CLUSTER FAILOVER FORCE");
             return 1;
         }
         resetManualFailover();
@@ -7176,7 +7292,11 @@ int clusterCommandSpecial(client *c) {
             /* If this is a forced failover, we don't need to talk with our
              * primary to agree about the offset. We just failover taking over
              * it without coordination. */
-            serverLog(LL_NOTICE, "Forced failover user request accepted (user request from '%s').", client);
+            if (c == server.primary) {
+                serverLog(LL_NOTICE, "Forced failover primary request accepted (primary request from '%s').", client);
+            } else {
+                serverLog(LL_NOTICE, "Forced failover user request accepted (user request from '%s').", client);
+            }
             manualFailoverCanStart();
             /* We can start a manual failover as soon as possible, setting a flag
              * here so that we don't need to waiting for the cron to kick in. */
