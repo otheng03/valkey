@@ -14,12 +14,35 @@ void keyinfoInit(void) {
     }
 }
 
+static unsigned int getIndex(robj *keyobj, long long max_len) {
+    sds key = keyobj->ptr;
+    return crc16(key, sdslen(key)) % max_len;
+}
+
+void keyinfoResize(int type, long long newlen) {
+    keyinfoEntry *entriesResized = zcalloc(sizeof(keyinfoEntry) * newlen);
+
+    for (long i = 0; i < server.keyinfo[type].max_len; i++) {
+        keyinfoEntry *entry = &server.keyinfo[type].entries[i];
+        if (entry->key != NULL) {
+            unsigned int idx = getIndex(entry->key, newlen);
+            printf("idx: %d\n", idx);
+            entriesResized[idx].id = entry->id;
+            entriesResized[idx].key = entry->key;
+            entriesResized[idx].value = entry->value;
+            entriesResized[idx].time = entry->time;
+        }
+    }
+
+    zfree(server.keyinfo[type].entries);
+    server.keyinfo[type].entries = entriesResized;
+}
+
 /* TODO : Remove entry if entry exists and value < threshold */
 void keyinfoUpdateEntryIfNeeded(robj *keyobj, long long value, int type) {
     if (server.keyinfo[type].threshold < 0 || server.keyinfo[type].max_len == 0) return; /* keyinfo disabled */
 
-    sds key = keyobj->ptr;
-    unsigned int idx = crc16(key, sdslen(key)) % server.keyinfo[type].max_len;
+    unsigned int idx = getIndex(keyobj, server.keyinfo[type].max_len);
     keyinfoEntry *entry = &server.keyinfo[type].entries[idx];
 
     if (value <= server.keyinfo[type].threshold) {

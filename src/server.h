@@ -3606,6 +3606,7 @@ void startEvictionTimeProc(void);
 
 /* keyinfo */
 void keyinfoUpdateEntryIfNeeded(robj *keyobj, long long num_elements, int type);
+void keyinfoResize(int type, long long newlen);
 
 /* Keys hashing/comparison functions for dict.c and hashtable.c hash tables. */
 uint64_t dictSdsHash(const void *key);
