@@ -8,7 +8,8 @@ void keyinfoFreeEntry(keyinfoEntry *entry) {
 /* Initialize the bigkey log. This function should be called a single time at server startup. */
 void keyinfoInit(void) {
     for (int i = 0; i < KEYINFO_TYPE_NUM; i++) {
-        server.keyinfo[i].entries = zcalloc(sizeof(keyinfoEntry) * server.keyinfo[i].max_len);
+        server.keyinfo[i].entries_max_len = server.keyinfo[i].max_len;
+        server.keyinfo[i].entries = zcalloc(sizeof(keyinfoEntry) * server.keyinfo[i].entries_max_len);
         /* TODO : Since the bucket size is fixed, the entry_id can be retrieved from the bucket index. */
         server.keyinfo[i].entry_id = 0;
     }
@@ -19,14 +20,14 @@ static unsigned int getIndex(robj *keyobj, long long max_len) {
     return crc16(key, sdslen(key)) % max_len;
 }
 
-void keyinfoResize(int type, long long newlen) {
-    keyinfoEntry *entriesResized = zcalloc(sizeof(keyinfoEntry) * newlen);
+void keyinfoResize(int type) {
+    long long new_len = server.keyinfo[type].max_len;
+    keyinfoEntry *entriesResized = zcalloc(sizeof(keyinfoEntry) * new_len);
 
-    for (long i = 0; i < server.keyinfo[type].max_len; i++) {
+    for (long i = 0; i < server.keyinfo[type].entries_max_len; i++) {
         keyinfoEntry *entry = &server.keyinfo[type].entries[i];
         if (entry->key != NULL) {
-            unsigned int idx = getIndex(entry->key, newlen);
-            printf("idx: %d\n", idx);
+            unsigned int idx = getIndex(entry->key, new_len);
             entriesResized[idx].id = entry->id;
             entriesResized[idx].key = entry->key;
             entriesResized[idx].value = entry->value;
@@ -36,6 +37,7 @@ void keyinfoResize(int type, long long newlen) {
 
     zfree(server.keyinfo[type].entries);
     server.keyinfo[type].entries = entriesResized;
+    server.keyinfo[type].entries_max_len = new_len;
 }
 
 /* TODO : Remove entry if entry exists and value < threshold */

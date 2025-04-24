@@ -407,6 +407,7 @@ typedef enum {
 
 /* Configuration and entry list of different types of command logs */
 typedef struct keyinfo {
+    long long entries_max_len;
     keyinfoEntry *entries;
     long long entry_id;
     long long threshold;
@@ -3606,7 +3607,7 @@ void startEvictionTimeProc(void);
 
 /* keyinfo */
 void keyinfoUpdateEntryIfNeeded(robj *keyobj, long long num_elements, int type);
-void keyinfoResize(int type, long long newlen);
+void keyinfoResize(int type);
 
 /* Keys hashing/comparison functions for dict.c and hashtable.c hash tables. */
 uint64_t dictSdsHash(const void *key);
