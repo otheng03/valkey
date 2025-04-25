@@ -7166,16 +7166,10 @@ const char *KEYINFO_GET_Tips[] = {
 #define KEYINFO_GET_Keyspecs NULL
 #endif
 
-/* KEYINFO GET type argument table */
-struct COMMAND_ARG KEYINFO_GET_type_Subargs[] = {
-{MAKE_ARG("many-elements",ARG_TYPE_STRING,-1,NULL,NULL,NULL,CMD_ARG_NONE,0,NULL)},
-{MAKE_ARG("large-memory",ARG_TYPE_STRING,-1,NULL,NULL,NULL,CMD_ARG_NONE,0,NULL)},
-};
-
 /* KEYINFO GET argument table */
 struct COMMAND_ARG KEYINFO_GET_Args[] = {
 {MAKE_ARG("count",ARG_TYPE_INTEGER,-1,NULL,NULL,NULL,CMD_ARG_NONE,0,NULL)},
-{MAKE_ARG("type",ARG_TYPE_ONEOF,-1,NULL,NULL,NULL,CMD_ARG_NONE,2,NULL),.subargs=KEYINFO_GET_type_Subargs},
+{MAKE_ARG("type",ARG_TYPE_PURE_TOKEN,-1,"MANY-ELEMENTS",NULL,NULL,CMD_ARG_NONE,0,NULL)},
 };
 
 /********** KEYINFO HELP ********************/
@@ -7216,15 +7210,9 @@ const char *KEYINFO_LEN_Tips[] = {
 #define KEYINFO_LEN_Keyspecs NULL
 #endif
 
-/* KEYINFO LEN type argument table */
-struct COMMAND_ARG KEYINFO_LEN_type_Subargs[] = {
-{MAKE_ARG("many-elements",ARG_TYPE_STRING,-1,NULL,NULL,NULL,CMD_ARG_NONE,0,NULL)},
-{MAKE_ARG("large-memory",ARG_TYPE_STRING,-1,NULL,NULL,NULL,CMD_ARG_NONE,0,NULL)},
-};
-
 /* KEYINFO LEN argument table */
 struct COMMAND_ARG KEYINFO_LEN_Args[] = {
-{MAKE_ARG("type",ARG_TYPE_ONEOF,-1,NULL,NULL,NULL,CMD_ARG_NONE,2,NULL),.subargs=KEYINFO_LEN_type_Subargs},
+{MAKE_ARG("type",ARG_TYPE_PURE_TOKEN,-1,"MANY-ELEMENTS",NULL,NULL,CMD_ARG_NONE,0,NULL)},
 };
 
 /********** KEYINFO RESET ********************/
@@ -7247,15 +7235,9 @@ const char *KEYINFO_RESET_Tips[] = {
 #define KEYINFO_RESET_Keyspecs NULL
 #endif
 
-/* KEYINFO RESET type argument table */
-struct COMMAND_ARG KEYINFO_RESET_type_Subargs[] = {
-{MAKE_ARG("many-elements",ARG_TYPE_STRING,-1,NULL,NULL,NULL,CMD_ARG_NONE,0,NULL)},
-{MAKE_ARG("large-memory",ARG_TYPE_STRING,-1,NULL,NULL,NULL,CMD_ARG_NONE,0,NULL)},
-};
-
 /* KEYINFO RESET argument table */
 struct COMMAND_ARG KEYINFO_RESET_Args[] = {
-{MAKE_ARG("type",ARG_TYPE_ONEOF,-1,NULL,NULL,NULL,CMD_ARG_NONE,2,NULL),.subargs=KEYINFO_RESET_type_Subargs},
+{MAKE_ARG("type",ARG_TYPE_PURE_TOKEN,-1,"MANY-ELEMENTS",NULL,NULL,CMD_ARG_NONE,0,NULL)},
 };
 
 /* KEYINFO command table */

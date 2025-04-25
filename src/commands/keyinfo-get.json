@@ -53,17 +53,8 @@
             },
             {
                 "name": "type",
-                "type": "oneof",
-                "arguments": [
-                    {
-                        "name": "many-elements",
-                        "type": "string"
-                    },
-                    {
-                        "name": "large-memory",
-                        "type": "string"
-                    }
-                ]
+                "token": "many-elements",
+                "type": "pure-token"
             }
         ]
     }
