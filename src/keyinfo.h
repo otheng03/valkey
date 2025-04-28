@@ -5,7 +5,6 @@
 
 /* This structure defines an entry inside the bigkey log bucket */
 typedef struct keyinfoEntry {
-    long long id;
     robj *key;
     long long value;
     time_t time;

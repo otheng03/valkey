@@ -10,8 +10,6 @@ void keyinfoInit(void) {
     for (int i = 0; i < KEYINFO_TYPE_NUM; i++) {
         server.keyinfo[i].entries_max_len = server.keyinfo[i].max_len;
         server.keyinfo[i].entries = zcalloc(sizeof(keyinfoEntry) * server.keyinfo[i].entries_max_len);
-        /* TODO : Since the bucket size is fixed, the entry_id can be retrieved from the bucket index. */
-        server.keyinfo[i].entry_id = 0;
     }
 }
 
@@ -28,7 +26,6 @@ void keyinfoResize(int type) {
         keyinfoEntry *entry = &server.keyinfo[type].entries[i];
         if (entry->key != NULL) {
             unsigned int idx = getIndex(entry->key, new_len);
-            entriesResized[idx].id = entry->id;
             entriesResized[idx].key = entry->key;
             entriesResized[idx].value = entry->value;
             entriesResized[idx].time = entry->time;
@@ -39,6 +36,7 @@ void keyinfoResize(int type) {
     server.keyinfo[type].entries = entriesResized;
     server.keyinfo[type].entries_max_len = new_len;
 }
+
 void keyinfoUpdateEntryIfNeeded(robj *keyobj, long long value, int type) {
     if (server.keyinfo[type].threshold < 0 || server.keyinfo[type].max_len == 0) return; /* keyinfo disabled */
 
@@ -52,19 +50,12 @@ void keyinfoUpdateEntryIfNeeded(robj *keyobj, long long value, int type) {
         return;
     }
 
-    if (entry->key != NULL && equalStringObjects(entry->key, keyobj)) {
-        entry->value = value;
-        entry->time = time(NULL);
-        return;
-    }
-
     incrRefCount(keyobj);
     /* If the entry is already set, free the entry */
     if (entry->key != NULL) {
         keyinfoFreeEntry(entry);
     }
 
-    entry->id = server.keyinfo[type].entry_id++;
     entry->key = keyobj;
     entry->value = value;
     entry->time = time(NULL);
@@ -147,7 +138,7 @@ void keyinfoCommand(client *c) {
             keyinfoEntry *entry = &server.keyinfo[type].entries[i];
             if (entry->key != NULL) {
                 addReplyArrayLen(c, 4);
-                addReplyLongLong(c, entry->id);
+                addReplyLongLong(c, i);
                 addReplyBulkCBuffer(c, entry->key->ptr, sdslen(entry->key->ptr));
                 addReplyLongLong(c, entry->value);
                 addReplyLongLong(c, entry->time);

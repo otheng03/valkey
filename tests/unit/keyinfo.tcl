@@ -9,17 +9,17 @@ start_server {tags {"keyinfo"} overrides {keyinfo-num-elements-larger-than 2 key
 
         r hset key-id0 f1 v1  f2 v2 f3 v3
         set e [lindex [r keyinfo get -1 many-elements] 0]
-        assert_equal [expr {[lindex $e 0] == 0}] 1
+        assert_equal [expr {[lindex $e 0] == 89}] 1
         r hset key-id0 f4 v4
         set e [lindex [r keyinfo get -1 many-elements] 0]
-        assert_equal [expr {[lindex $e 0] == 0}] 1
+        assert_equal [expr {[lindex $e 0] == 89}] 1
 
         r set key-id1 12345
         set e [lindex [r keyinfo get -1 many-elements] 1]
-        assert_equal [expr {[lindex $e 0] == 1}] 1
+        assert_equal [expr {[lindex $e 0] == 120}] 1
         r set key-id1 123456
         set e [lindex [r keyinfo get -1 many-elements] 1]z
-        assert_equal [expr {[lindex $e 0] == 1}] 1
+        assert_equal [expr {[lindex $e 0] == 120}] 1
     }
 
     test {KEYINFO - If the string length exceeds keyinfo-num-elements-larger-than, it must be recorded in keyinfo} {

@@ -409,7 +409,6 @@ typedef enum {
 typedef struct keyinfo {
     long long entries_max_len;
     keyinfoEntry *entries;
-    long long entry_id;
     long long threshold;
     long long max_len;
 } keyinfo;
