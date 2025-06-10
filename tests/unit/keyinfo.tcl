@@ -116,4 +116,27 @@ start_server {tags {"keyinfo"} overrides {keyinfo-num-elements-larger-than 2 key
         r zrem key-zset m3
         assert_equal [r keyinfo len many-elements] 0
     }
+
+    test {KEYINFO - runtime configuration of threshold works} {
+        r keyinfo reset many-elements
+        r config set keyinfo-num-elements-larger-than 5
+        r set dynkey abcde
+        assert_equal [r keyinfo len many-elements] 0
+        r config set keyinfo-num-elements-larger-than 4
+        r set dynkey abcde
+        assert_equal [r keyinfo len many-elements] 1
+    }
+
+    test {KEYINFO - resizing max length at runtime keeps existing entries} {
+        r keyinfo reset many-elements
+        r config set keyinfo-large-num-elements-max-len 2
+        r set k1 123
+        r set k2 123
+        assert_equal [r keyinfo len many-elements] 2
+        r config set keyinfo-large-num-elements-max-len 4
+        assert_equal [r keyinfo len many-elements] 2
+        r set k3 123
+        r set k4 123
+        assert_equal [r keyinfo len many-elements] 4
+    }
 }
